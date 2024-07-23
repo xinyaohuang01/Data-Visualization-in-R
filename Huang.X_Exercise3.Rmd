@@ -1,0 +1,250 @@
+---
+title: "Huang.X_Exercise3"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-02-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Note: Since I had a problem loading the Rdata file provided, I downloaded and used the whole dataset from the website (Rdata version 2.2, which contains all 3 waves).
+
+```{r}
+# Load libaraies and dataset 
+library(ggplot2)
+library(tidyverse)
+load("/Users/Administrator/Downloads/HCMST 2017 to 2022 small public version 2.2.rdata")
+
+```
+
+Q1:Dating trends over time
+
+```{r}
+# Graph 1:
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q21a_year) %>%
+  summarize(cowork = sum(w1_q24_R_cowork) / sum(w1_q24_summary_all_codes),
+            internet = sum(w1_q24_internet_dating) / sum(w1_q24_summary_all_codes),
+            party = sum(w1_q24_party) / sum(w1_q24_summary_all_codes),
+            neighbor = sum(w1_q24_R_neighbor) / sum(w1_q24_summary_all_codes),
+            school = (sum(w1_q24_school) + sum(w1_q24_college)) / sum(w1_q24_summary_all_codes),
+            church = sum(w1_q24_church) / sum(w1_q24_summary_all_codes),
+            restaurant = sum(w1_q24_bar_restaurant) / sum(w1_q24_summary_all_codes))
+
+summarized_data_long <- tidyr::pivot_longer(summarized_data,
+                                             cols = -w1_q21a_year,
+                                             names_to = "Mode",
+                                             values_to = "frequency")
+
+ggplot(summarized_data_long, aes(x = w1_q21a_year, y = frequency, color = Mode, group = Mode, size = frequency)) +
+  geom_point() +
+  labs(title = "Dating trends over time",
+       x = "Time",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+# Graph 2:
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q21a_year) %>%
+  summarize(cowork = sum(w1_q24_R_cowork) / sum(w1_q24_summary_all_codes),
+            internet = sum(w1_q24_internet_dating) / sum(w1_q24_summary_all_codes),
+            party = sum(w1_q24_party) / sum(w1_q24_summary_all_codes),
+            neighbor = sum(w1_q24_R_neighbor) / sum(w1_q24_summary_all_codes),
+            school = (sum(w1_q24_school) + sum(w1_q24_college)) / sum(w1_q24_summary_all_codes),
+            church = sum(w1_q24_church) / sum(w1_q24_summary_all_codes),
+            restaurant = sum(w1_q24_bar_restaurant) / sum(w1_q24_summary_all_codes))
+
+summarized_data_long <- tidyr::pivot_longer(summarized_data,
+                                             cols = -w1_q21a_year,
+                                             names_to = "Mode",
+                                             values_to = "frequency")
+
+ggplot(summarized_data_long, aes(x = w1_q21a_year, y = frequency, color = Mode, group = Mode)) +
+  geom_point() +
+  geom_line() +  # Add lines to connect points
+  labs(title = "Dating trends over time",
+       x = "Time",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+I will recommend using the first graph.The reasons are as follows: 1) The lines in graph 2 are not constant, which make them looks weird, probably because of the discontinuity of the raw data. 2) The change of the dot size in graph 1 make it clearer about the frequency of the meeting mode for the audience.
+
+Three design choices: 1) Increase data density. I made the dots biger with higher frequency. 2) Maximize the data-ink ratio. I remove the grey background to make the graph more refreshing.
+
+Q2: Age is just a number
+```{r}
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_ppgender)
+
+ggplot(summarized_data, aes(x = w1_ppage, y = w1_q9, color = factor(w1_ppgender, labels = c("Male", "Female")))) +
+  geom_point() +
+  labs(title = "Relationship between respondents' age and their partner’s age",
+       x = "Respondent’s age",
+       y = "Partner’s age",
+       color = "Gender") +  # Change the color legend title
+  theme_minimal() +
+  annotate("text", x = 40, y = 100, label = "Males are more likely to find a younger partner", color = "black", size = 4)
+```
+
+Q3: Politics and Dating
+
+```{r}
+# Graph 1:
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q12)
+summarized_data <- summarized_data[summarized_data$w1_q12 != -1, ]
+summarized_data <- summarized_data[!is.na(summarized_data$w1_q12), ]
+
+
+ggplot(summarized_data, aes(x = factor(w1_q12), y = w1_relate_duration_in2017_years, fill = w1_q12)) +
+  geom_boxplot() + 
+  labs(title = "Relationship between the political affiliation of partners and the duration of the relationships",
+       x = "Partners' political affiliation",
+       y = "duration of the relationships",
+       fill = 'Political Party Affilication') +
+  scale_x_discrete(labels = c("1" = "Strong Republican", "2" = "", "3" = "", "4" = "", "5" = "", "6" = "", "7" = "Strong Democrat")) +
+  theme_minimal()
+
+```
+
+```{r}
+# Graph 2:
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q12) %>%
+  summarize(mean_duration = mean(w1_relate_duration_in2017_years, na.rm = TRUE))
+
+summarized_data <- summarized_data[summarized_data$w1_q12 != -1, ]
+summarized_data <- summarized_data[!is.na(summarized_data$w1_q12), ]
+
+ggplot(summarized_data, aes(x = factor(w1_q12), y = mean_duration)) +
+ geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Relationship between the political affiliation of partners and the duration of the relationships",
+       x = "Partners' political affiliation",
+       y = "duration of the relationships") +
+  scale_x_discrete(labels = c("1" = "Strong Republican", "2" = "", "3" = "", "4" = "", "5" = "", "6" = "", "7" = "Strong Democrat")) +
+  theme_minimal()
+```
+
+I would personally recommend the first graph since it provide more information than the second one. And the color gradient effect fits the theme of the x variable -- from strong republican to strong democrat.
+
+Q4: Your turn to choose
+```{r}
+# Graph 1:
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q32) %>%
+  summarize(mean_quality = mean(w1_q34, na.rm = TRUE))
+  
+summarized_data <- summarized_data[summarized_data$w1_q32 != -1, ]
+summarized_data <- summarized_data[!is.na(summarized_data$w1_q32), ]
+
+
+ggplot(summarized_data, aes(x = factor(w1_q32), y = mean_quality)) +
+ geom_bar(stat = "identity", fill = 'orange',width = 0.5) +
+  labs(title = "Relationship between the usage of internet when finding a partner and quality of the relationship",
+       x = "usage of internet",
+       y = "quality of the relationship") +
+  scale_x_discrete(labels = c("1" = "No Internet", "2" = "social networking site", "3" = "matchmaking site", "4" = "classified advertising site", "5" = "Internet chat room", "6" = "other internet service", "8" = "app")) +
+  theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+```
+```{r}
+# Graph 2:
+
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_q32) %>%
+  summarize(mean_quality = mean(w1_q34, na.rm = TRUE))
+  
+summarized_data <- summarized_data[summarized_data$w1_q32 != -1, ]
+summarized_data <- summarized_data[!is.na(summarized_data$w1_q32), ]
+
+ggplot(summarized_data, aes(x = factor(w1_q32), y = mean_quality)) +
+  geom_point(color = 'orange', size = 7) +  # Use geom_point for dot plot
+  labs(title = "Relationship between the usage of internet when finding a partner and quality of the relationship",
+       x = "Usage of Internet",
+       y = "Quality of the Relationship") +
+  scale_x_discrete(labels = c("1" = "No Internet", "2" = "Social Networking Site", "3" = "Matchmaking Site", "4" = "Classified Advertising Site", "5" = "Internet Chat Room", "6" = "Other Internet Service", "8" = "App")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+I would prefer the second graph because the proportion of the columns is too large and redundant in the first graph. The dot plot looks more refreshing than the first one. 
+Also for the 2nd graph, the start of y axis is 1.5 instead of 0.0, making the variation of y variable more obvious for the audience. It highlights the pattern that couples that know each other from internet chat room are more likel to enjoy a high-quality relationship.
+
+
+Q5: Make two plots interactive
+```{r}
+library(plotly)
+summarized_data <- `HCMST small public version 2.2` %>%
+  group_by(w1_ppgender)
+
+plot1 <-  ggplot(summarized_data, aes(x = w1_ppage, y = w1_q9, color = factor(w1_ppgender, labels = c("Male", "Female")))) +
+    geom_point() +
+    labs(title = "Relationship between respondents' age and their partner’s age",
+         x = "Respondent’s age",
+         y = "Partner’s age",
+         color = "Gender") +  # Change the color legend title
+    theme_minimal() +
+    annotate("text", x = 40, y = 100, label = "Male are more likely to find a younger partner", color = "black", size = 3)
+ggplotly(plot1)
+
+```
+The interactivity of this graph makes it easier for the reader to capture the age of the respondent and their partner for every dot by hovering over the dot.
+
+```{r}
+library(highcharter)
+
+summarized_data <- `HCMST small public version 2.2` %>%
+  select(w1_q32, w1_q34) %>%
+  group_by(w1_q32) %>%
+  summarize(mean_quality = mean(w1_q34, na.rm = TRUE))
+  
+summarized_data <- summarized_data[summarized_data$w1_q32 != -1, ]
+summarized_data <- summarized_data[summarized_data$w1_q32 != 7, ]
+summarized_data <- summarized_data[!is.na(summarized_data$w1_q32), ]
+
+custom_labels <- c("1" = "No Internet", "2" = "Social Networking Site", "3" = "Matchmaking Site", "4" = "Classified Advertising Site", "5" = "Internet Chat Room", "6" = "Other Internet Service", "7" = "","8" = "App")
+
+hchart(summarized_data, "scatter", 
+       hcaes(x = w1_q32, 
+             y = mean_quality, 
+             group = w1_q32)) %>%
+  hc_xAxis(categories = custom_labels, title = list(text = "Usage of Internet")) %>%
+  hc_yAxis(title = list(text = "Quality of the relationship")) %>%
+  hc_plotOptions(series = list(marker = list(radius = 10))) %>%
+  hc_title(text = "Relationship between Internet Usage and Quality of Relationship")
+```
+The interactivity of the chart enables the reader to capture the exact mean value of the y variable for each category.
+
+Q6: Data Table
+
+```{r}
+library(DT)
+library(dplyr)
+library(stringr)
+
+summarized_data <- `HCMST small public version 2.2`
+summarized_data <- summarized_data %>%
+  select(w1_ppage, w1_ppeduc, w1_ppethm, w1_ppwork, w1_q34) %>%
+  rename(age = w1_ppage, education = w1_ppeduc, ethnicity = w1_ppethm, employ_status = w1_ppwork, relationship_quality = w1_q34)
+
+datatable(summarized_data)
+pretty_headers <- 
+  gsub("[.]", " ", colnames(summarized_data)) %>%
+  str_to_title()
+
+summarized_data %>%
+  datatable(
+    rownames = FALSE,
+    colnames = pretty_headers,
+    filter = list(position = "top"),
+    options = list(language = list(sSearch = "Filter:"))
+  )
+```
+In this data table, respondents' age, highest education level, ethnicity, employment status, and the self-rating of their current relationship quality was presented. I created this data table to provide a basic demographic information of the respondent for the reader.

@@ -1,0 +1,259 @@
+---
+title: "Huang.X_Exercise11"
+output: html_document
+date: "2024-04-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Top Songs
+```{r}
+# Load necessary packages
+library(shiny)
+library(DT)
+
+# Load data
+setwd("/Users/Administrator/Documents/GitHub/")
+billboard_data <- read.csv("Huang_Xinyao/course_content/Exercises/11_billboard_GRADED/billboard.csv", stringsAsFactors = FALSE)
+
+features_data <- read.csv("Huang_Xinyao/course_content/Exercises/11_billboard_GRADED/audio_features.csv")
+```
+
+
+```{r}
+billboard_data$week_id <- as.Date(billboard_data$week_id, "%m/%d/%Y")
+billboard_data$year <- as.numeric(format(billboard_data$week_id, "%Y"))
+```
+
+
+```{r}
+
+ui <- fluidPage(
+    titlePanel("Top Billboard Songs Explorer"),
+    sidebarLayout(
+        sidebarPanel(
+            sliderInput("yearRange",
+                        "Select Year Range:",
+                        min = 1958,
+                        max = 2021,
+                        value = c(1958, 2021),
+                        step = 1
+            )
+        ),
+        mainPanel(
+            DTOutput("topSongsTable")
+        )
+    )
+)
+
+library(dplyr)
+server <- function(input, output) {
+  
+  # Reactive expression to filter the data based on the selected year range
+  filtered_data <- reactive({
+    billboard_data %>%
+      filter(year >= input$yearRange[1], year <= input$yearRange[2]) %>%
+      arrange(desc(week_id)) %>%
+      distinct(song_id, .keep_all = TRUE) %>%
+      group_by(song, performer) %>%
+      summarise(total_weeks = sum(weeks_on_chart), peak_position = min(peak_position)) %>%
+      ungroup() %>%
+      arrange(desc(total_weeks)) %>%
+      head(20)
+  })
+  
+  # Render the datatable output
+  output$topSongsTable <- renderDT({
+    filtered_data() %>%
+      select(song, performer, peak_position, total_weeks) %>%
+      datatable(options = list(pageLength = 20))
+  })
+}
+
+# Run the app
+shinyApp(ui = ui, server = server)
+
+```
+
+2. Top Artists
+
+```{r}
+# ui.R
+library(shiny)
+library(shinyWidgets)
+
+ui <- fluidPage(
+  titlePanel("Billboard Song Rankings by Artist"),
+  sidebarLayout(
+    sidebarPanel(
+      pickerInput(
+        inputId = "artist",
+        label = "Select an Artist:",
+        choices = NULL,  # Choices will be updated from server
+        options = list(`live-search` = TRUE),
+        multiple = FALSE
+      )
+    ),
+    mainPanel(
+      plotOutput("rankChart")
+    )
+  )
+)
+
+# server.R
+library(shiny)
+library(dplyr)
+library(ggplot2)
+
+server <- function(input, output, session) {
+  
+  # Load and preprocess data
+  data <- billboard_data
+  
+  # Update artist choices based on data
+  updatePickerInput(session, "artist", choices = unique(data$performer))
+  
+  # Reactive expression to filter data based on selected artist
+  filtered_data <- reactive({
+    req(input$artist)
+    data %>% filter(performer == input$artist)
+  })
+  
+  # Output the rank chart
+  output$rankChart <- renderPlot({
+    req(filtered_data())
+    ggplot(filtered_data(), aes(x = week_id, y = week_position, group = song)) +
+      geom_line(aes(color = song)) +
+      scale_y_reverse() +
+      labs(title = paste("Billboard Rankings Over Time for", input$artist),
+           x = "Date", y = "Billboard Rank")
+  })
+}
+shinyApp(ui = ui, server = server)
+```
+
+
+
+3. Audio Features
+```{r}
+library(dplyr)
+library(stringr)
+library(shinyWidgets)
+library(plotly)
+library(stringr)
+
+# Read the combined dataset
+billboard_data$song_id <- tolower(billboard_data$song_id)
+features_data$song_id <- tolower(features_data$song_id)
+
+# Join the datasets on the song_id column
+combined_data <- inner_join(billboard_data, features_data, by = "song_id")
+
+# Convert week_id to Date and extract year for filtering
+combined_data$week_id <- as.Date(combined_data$week_id, "%m/%d/%Y")
+combined_data$year <- as.numeric(format(combined_data$week_id, "%Y"))
+
+# To reduce lagging, I select only songs released after 2000
+# combined_data <- filter(combined_data,  year >= 2000)
+# combined_data <- filter(combined_data,  year <= 2010)
+
+clean_split_genres <- function(genre_string) {
+  genres <- str_replace_all(genre_string, "\\[|\\]|", "")
+  return(genres)
+}
+
+# Apply the function to the spotify_genre column
+combined_data$spotify_genre <- sapply(combined_data$spotify_genre, clean_split_genres, USE.NAMES = FALSE)
+combined_data <- combined_data %>% select(spotify_genre, performer.x, year, danceability, energy, song.x, peak_position)
+
+```
+
+
+```{r}
+library(shiny)
+library(shinyWidgets)
+library(dplyr)
+library(plotly)
+
+ui <- fluidPage(
+  titlePanel("Explore Billboard Songs with Spotify Audio Features"),
+  sidebarLayout(
+    sidebarPanel(
+      pickerInput(
+        inputId = "genre",
+        label = "Select Genre(s):",
+        choices = unique(unlist(strsplit(combined_data$spotify_genre, split = ","))),
+        options = pickerOptions(actionsBox = TRUE),
+        multiple = TRUE
+      ),
+      sliderInput("yearRange",
+                  "Select Year Range:",
+                  min = 1958,
+                  max = 2021,
+                  value = c(1958, 2021),
+                  step = 1),
+      pickerInput(
+        inputId = "artist",
+        label = "Select Artist:",
+        choices = character(0),  # Will be updated from server on app launch
+        options = pickerOptions(liveSearch = TRUE,
+                                liveSearchPlaceholder = "Type to search...",
+                                style = "btn-primary",
+                                size = 10),  # Limit the number of visible options
+        multiple = FALSE
+      )
+    ),
+    mainPanel(
+      plotlyOutput("scatterPlot")
+    )
+  )
+)
+
+server <- function(input, output, session) {
+  
+  observe({
+    updatePickerInput(session, "artist", choices = sort(unique(tolower(combined_data$performer.x))))
+  })
+
+  filtered_data <- reactive({
+    req(input$artist, input$yearRange)  # Ensure that artist and yearRange inputs are received
+    # Define a logical condition to check if genre input is empty
+    genre_selected <- !is.null(input$genre) && length(input$genre) > 0
+    
+    data <- combined_data %>%
+      filter(year >= input$yearRange[1], year <= input$yearRange[2],
+             (!genre_selected | (genre_selected && sapply(input$genre, function(g) grepl(g, spotify_genre, ignore.case = TRUE)) %>% any())),
+             tolower(performer.x) == tolower(input$artist))
+    
+    # Sample data if too large
+    if(nrow(data) > 500) {
+      data <- sample_n(data, 500)
+    }
+    
+    data
+  })
+  
+  output$scatterPlot <- renderPlotly({
+    req(filtered_data())
+    data <- filtered_data()
+    
+    plot_ly(data, x = ~danceability, y = ~energy, type = 'scatter', mode = 'markers',
+            text = ~paste("Artist: ", performer.x,
+                          "<br>Song: ", song.x,
+                          "<br>Year: ", year,
+                          "<br>Billboard Peak: ", peak_position),
+            hoverinfo = 'text',
+            marker = list(size = 10, opacity = 0.5, color = data$peak_position)) %>%
+      layout(title = "Scatter plot of Audio Features",
+             xaxis = list(title = "Danceability"),
+             yaxis = list(title = "Energy"))
+  })
+}
+
+shinyApp(ui = ui, server = server)
+
+```
+
+

@@ -1,0 +1,389 @@
+---
+title: "Huang.X_Exercise9"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-03-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Dialogue
+a) Most Common Words
+```{r}
+# Load libraries and data
+library(ggplot2)
+library(tidyverse)
+library(tidytext)
+data = read.csv('/Users/Administrator/Documents/GitHub/Huang_Xinyao/course_content/Exercises/09_moviescripts_GRADED/data/dialogue.csv')
+```
+
+```{r}
+# Define cleaning functions
+clean_text <- function(text) {
+  # Convert text to lowercase
+  text <- tolower(text)
+  # Remove punctuation
+  text <- gsub("[[:punct:]]", "", text)
+  # Remove numbers
+  text <- gsub("\\d+", "", text)
+  # Remove white space
+  text <- trimws(text)
+  return(text)
+}
+
+# Apply cleaning functions to the dialogue column
+cleaned_data <- data %>%
+  mutate(cleaned_dialogue = map_chr(Dialogue, clean_text)) %>%
+  filter(!str_detect(cleaned_dialogue, "^$"))
+
+# Tokenize the cleaned dialogue into individual words
+cleaned_words <- cleaned_data %>%
+  unnest_tokens(word, cleaned_dialogue)
+```
+
+```{r}
+# Define the stop words list
+stop_words <- data.frame(word = tm::stopwords("en"))
+
+# Remove common stop words
+cleaned_words <- cleaned_words %>%
+  anti_join(stop_words)
+
+# Count the frequency of each word
+cleaned_word_freq <- cleaned_words %>%
+  count(word, sort = TRUE)
+```
+
+
+```{r}
+# Visualize the top 20 most frequently used words
+top_20_cleaned_words <- cleaned_word_freq %>%
+  slice_max(n = 20, order_by = n) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  coord_flip() +
+  labs(title = "Top 20 Most Frequently Used Words in Movie Dialogue",
+       x = "Word",
+       y = "Frequency") +
+  theme_minimal()
+
+# Display the plot
+print(top_20_cleaned_words)
+
+```
+1. b) Word Cloud
+```{r}
+library(wordcloud)
+library(tokenizers)
+library(dplyr)
+library(tm)
+metadata <- read.csv("/Users/Administrator/Documents/GitHub/Huang_Xinyao/course_content/Exercises/09_moviescripts_GRADED/data/metadata.csv")
+```
+
+```{r}
+# In this part, I want to filter movies that arae released after 2000
+movies_after_2000 <- subset(metadata, as.integer(imdb_release_date) > 2000)
+
+# Merge metadata with dialogue data
+merged_data_2000 <- merge(movies_after_2000, data, by.x = 'file_name', by.y = "movie_id")
+dialogue_concatenated <- merged_data_2000 %>%
+  group_by(file_name) %>%
+  summarise(AllDialogue = paste(Dialogue, collapse = " "))
+
+# Tokenize the concatenated dialogue into words
+words <- unlist(tokenize_words(dialogue_concatenated$AllDialogue))
+
+# Remove stop words
+stop_words <- stopwords("en")
+words <- words[!tolower(words) %in% stop_words]
+
+# Count the frequency of each word
+word_freq <- table(words)
+
+# Select the top 200 most frequent words
+top_words <- head(sort(word_freq, decreasing = TRUE), 100)
+
+# Create a word cloud from the top 200 most frequent words
+wordcloud(words = names(top_words), freq = top_words, min.freq = 1, colors = brewer.pal(8, "Dark2"))
+```
+As we can see, the most frequently used words are pretty much the same regardless of the release date of the movies. 
+
+
+1. c) Success in Words
+```{r}
+merged_data <- merge(metadata, data, by.x = 'file_name', by.y = "movie_id")
+```
+
+```{r}
+# I measured the success of the movie by the popularity. If the popularity >= 27.892, then it's considered successful, otherwise unsuccessful, which separated the movies into two sets with roughly the same size.
+success_data <- merged_data %>%
+   mutate(whether_success = ifelse(popularity >= 27.892, "successful", "unsuccessful"))
+
+# Tokenize the cleaned dialogue into individual words
+success_words <- success_data %>%
+  unnest_tokens(word, Dialogue)
+
+# Remove common stop words
+stop_words <- data.frame(word = tm::stopwords("en"))
+success_words <- success_words %>%
+  anti_join(stop_words)
+
+# Count the frequency of each word
+word_freq <- success_words %>%
+  count(whether_success, word, sort = TRUE)
+```
+
+
+```{r}
+# Select the top 25 words for each success category
+top_words <- word_freq %>%
+  group_by(whether_success) %>%
+  slice_head(n = 15)
+```
+
+```{r}
+# Create a pyramid plot
+library(ggthemes)
+ggplot(top_words, aes(x = reorder(word, n),
+                  y = n, fill = whether_success)) +
+  geom_bar(data = filter(top_words, whether_success == "successful"), stat = "identity") +
+  geom_bar(data = filter(top_words, whether_success == "unsuccessful"), stat = "identity", aes(y=-n)) +
+  scale_fill_brewer(palette = "Set1", direction=-1) +
+  scale_y_continuous(breaks=seq(-30000,30000,10000), labels=seq(-30000,30000,10000)) + 
+  theme_fivethirtyeight() +
+  coord_flip() +
+  labs(fill = "Whether Successful")
+```
+
+
+1. d) Profanity
+```{r}
+# Read text and create a list of profanities
+profanity_list <- readLines('/Users/Administrator/Downloads/profanity_list.txt')
+```
+
+```{r}
+# Merge data
+merged_data <- merge(metadata, data, by.x = 'file_name', by.y = "movie_id")
+merged_words <- merged_data %>%
+  unnest_tokens(word, Dialogue)
+
+# Count the frequency of profanity words in each movie
+profanity_counts <- merged_words %>%
+  filter(word %in% profanity_list) %>%
+  count(file_name, word)
+
+# Calculate the profanity score for each movie
+movie_profanity_score <- profanity_counts %>%
+  group_by(file_name) %>%
+  summarise(profanity_score = sum(n))
+
+# Sort the movies based on their profanity score and visualize the top 10
+top_10_movies <- movie_profanity_score %>%
+  arrange(desc(profanity_score)) %>%
+  head(10)
+```
+
+```{r}
+# Create a bar plot to visualize the profanity scores of the top 10 movies
+ggplot(top_10_movies, aes(x = reorder(file_name, profanity_score), y = profanity_score)) +
+  geom_bar(stat = "identity", fill = "orchid", width = 0.5) +
+  labs(title = "Top 10 Movies with Most Profanity",
+       x = "Movie Name",
+       y = "Profanity Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+# Plot the profanity score against the release date of the movie
+top_10_movies_with_date <- merge(top_10_movies, metadata, by = 'file_name')
+ggplot(top_10_movies_with_date, aes(x = imdb_release_date, y = profanity_score)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "Release Date", y = "Profanity Score", title = "Profanity Usage Over Time") +
+  theme_minimal()
+```
+
+
+1. e) Simplicity is a Virtue
+```{r}
+library(koRpus)
+require(quanteda.textstats)
+
+# Group the data by movie
+grouped_data <- merged_data %>% 
+  group_by(file_name) %>%
+  summarize(combined_dialogue = paste(Dialogue, collapse = " "))
+```
+
+```{r}
+# Calculate Flesch Reading Ease scores for each movie
+grouped_data <- grouped_data %>%
+  mutate(flesch_scores = textstat_readability(combined_dialogue, measure = "Flesch"))
+merged_data_readability <- merge(metadata, grouped_data, by = 'file_name')
+```
+
+```{r}
+# Obtain the linear regression model
+linear_model <- lm(vote_average ~ flesch_scores$Flesch, data = merged_data_readability)
+
+# Print the summary of the linear regression model
+print(summary(linear_model))
+```
+
+```{r}
+# Visualize the relationship using a scatter plot
+ggplot(merged_data_readability, aes(x = flesch_scores$Flesch, y = vote_average)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Relationship between Readability Score and IMDb Vote Average",
+       x = "Readability Score",
+       y = "IMDb Vote Average") +
+  theme_minimal()
+```
+There seems to be a positive correlation between the readability of the movie scripts and the IMDb vote average, which means that the easier the movie lines to understand, more likely the movie will be popular. However the p value suggested that the correlation may not be significant.
+
+
+2. a) Defining words
+```{r}
+# Load required libraries
+library(tm)
+library(dplyr)
+library(tidyr)
+library(quanteda)
+```
+
+```{r}
+# Preprocess the data
+merged_data <- merge(metadata, data, by.x = 'file_name', by.y = "movie_id")
+```
+
+```{r}
+grouped_data <- merged_data %>% 
+  group_by(file_name) %>%
+  summarize(combined_dialogue = paste(Dialogue, collapse = " "))
+```
+
+```{r}
+grouped_data_with_genre <- grouped_data %>%
+  inner_join(metadata, by = "file_name") %>%
+  select(file_name, combined_dialogue, genres) %>%
+  distinct()  # Remove duplicate entries
+```
+
+```{r}
+grouped_data_with_genre <- grouped_data_with_genre %>%
+  mutate(genres = strsplit(genres, ", ")) %>%
+  unnest(genres) %>%
+  unnest_tokens(word, combined_dialogue) 
+```
+
+```{r}
+# Calculate TF-IDF measure
+tfidf_data <- grouped_data_with_genre %>%
+  count(genres, word) %>%
+  bind_tf_idf(word, genres, n)
+```
+
+```{r}
+# Select the top defining words for each genre
+top_words <- tfidf_data %>%
+  group_by(genres) %>%
+  top_n(3, wt = tf_idf)
+```
+
+```{r}
+ggplot(top_words, aes(x = reorder(word, tf_idf), y = tf_idf, fill = genres)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top Defining Words Across Different Movie Genres",
+       x = "Word",
+       y = "TF-IDF Score",
+       fill = "Genre") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+2.b) Emotions
+```{r}
+# import nrc lexicon
+library(tidyverse)
+library(tidytext)
+nrc_lexicon <- get_sentiments("nrc")
+```
+
+```{r}
+# Since my laptop keeps crashing when I tried to deal with the whole dataset, I only selected the movies after 2000 for this part of work. The other workflow should be the same. Hope that's fine.
+grouped_data_2000 <- merged_data_2000 %>% 
+  group_by(file_name) %>%
+  summarize(combined_dialogue = paste(Dialogue, collapse = " "))
+
+# Perform an inner join to merge the two files based on a common identifier
+data_2000 <- inner_join(grouped_data_2000, metadata, by = 'file_name')
+selected_data <- data_2000[, c("file_name", "combined_dialogue", "genres")]
+```
+
+```{r}
+selected_data <- selected_data %>%
+  mutate(genres = strsplit(genres, ", ")) %>%
+  unnest(genres) 
+```
+
+```{r}
+tokenized_by_genre <- selected_data %>%
+  unnest_tokens(word, combined_dialogue)
+```
+
+```{r}
+# Join with the NRC lexicon to identify emotions
+data_emotions <- tokenized_by_genre %>%
+  inner_join(nrc_lexicon, by = "word") %>%
+  select(genres, word, sentiment) %>%
+  distinct()  # Remove duplicate entries
+
+# Count the occurrences of each emotion within each genre
+emotion_counts <- data_emotions %>%
+  count(genres, sentiment) %>%
+  spread(sentiment, n, fill = 0)  # Spread sentiment categories into separate columns
+
+emotion_counts <- emotion_counts %>%
+  select(-negative, -positive)
+```
+
+```{r}
+# Visualize the relationship between emotions (Joy) and movie genres
+ggplot(emotion_counts, aes(x = genres, y = joy, fill = genres)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Joy in Movie Genres", x = "Genre", y = "Count of Joy Words") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+I first plotted a graph that indicates the relationship between the emotion 'joy' and movie genres. As we can see, drama movie contains the most joy sentiment among all the genres, while music and tv movies the least.
+
+```{r}
+emotion_counts <- emotion_counts %>%
+  mutate(max_emotion = apply(emotion_counts[, -1], 1, function(row) names(which.max(row))))
+
+emotion_counts <- emotion_counts %>%
+  filter(row_number() > 1) %>%  # Filter to keep rows starting from the second row
+  rowwise() %>%
+  mutate(max_value = max(c_across(starts_with("anger"):ends_with("trust"))))
+```
+
+
+```{r}
+# Plot the most frequent emotion in each genre
+ggplot(emotion_counts, aes(x = genres, y = max_value, fill = max_emotion)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Most Frequent Emotion in Each Genre",
+       x = "Genre",
+       y = "Count of Most Frequent Emotion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+This graph records the most frequently expressed emotion for each genre. From the graph, we can see that almost all the genres have the 'fear' sentiment the most. However, for music, tv movie, and western movie, they are more likely to show 'trust' in their dialogues.

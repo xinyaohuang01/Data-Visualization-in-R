@@ -1,0 +1,143 @@
+---
+title: "Huang.X_Exercise7"
+output: html_document
+date: "2024-03-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+# Load libraries
+library(ggplot2)
+library(ggmap)
+library(dplyr)
+library(maps)
+
+data = read.csv('/Users/Administrator/Documents/GitHub/Huang_Xinyao/course_content/Exercises/07_severe_weather_GRADED/data/storms.csv')
+
+```
+
+1 a) State Level Choropleth Maps
+```{r}
+aggregated_state_data <- data %>%
+  group_by(STATE) %>%
+  summarise(total_damage = sum(DAMAGE_PROPERTY_USD + DAMAGE_CROPS_USD, na.rm = TRUE))
+aggregated_state_data$STATE <- tolower(aggregated_state_data$STATE)
+
+us_states <- map_data("state")
+map_data_states <- merge(us_states, aggregated_state_data, by.x = "region", by.y = "STATE",all.x = TRUE)
+
+ggplot(map_data_states) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = total_damage), color = "black") +
+#  geom_text(aes(x = long, y = lat, label = total_damage), size = 2, color = "white", check_overlap = TRUE, nudge_x = 0.1) +
+  scale_fill_viridis_c(name = "Total Damage", label = scales::dollar_format(scale = 1e-6)) +  # Adjust scale for readability
+  labs(title = "Total Monetary Damage by State",
+       subtitle = "From PROPERTY and CROPS damage",
+       caption = "Source: Storm Events Database") +
+  theme_minimal() +
+  coord_map()
+
+```
+
+1 b) County Level Choropleth Maps
+```{r}
+aggregated_county_data <- data %>%
+  group_by(CZ_NAME) %>%
+  summarise(total_damage = sum(DAMAGE_PROPERTY_USD + DAMAGE_CROPS_USD, na.rm = TRUE))
+
+aggregated_county_data$CZ_NAME <- tolower(aggregated_county_data$CZ_NAME)
+
+us_counties <- map_data("county")
+
+map_data <- merge(us_counties, aggregated_county_data, by.x = "subregion", by.y = "CZ_NAME", all.x = TRUE)
+
+ggplot(map_data) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = total_damage), color = "black") +
+#  geom_text(aes(x = long, y = lat, label = total_damage), size = 2, color = "black", check_overlap = TRUE, nudge_x = 0.1) +
+  scale_fill_viridis_c(name = "Total Damage", label = scales::dollar_format(scale = 1e-6)) +  # Adjust scale for readability
+  labs(title = "Total Monetary Damage by County",
+       subtitle = "From PROPERTY and CROPS damage",
+       caption = "Source:Storm Events Database") +
+  theme_minimal() +
+  coord_map()
+```
+
+1 c) Density Map
+```{r}
+density_data <- data %>%
+  group_by(STATE) %>%
+  summarize(severe_events_density = sum(INJURIES_DIRECT + INJURIES_INDIRECT + DEATHS_DIRECT + DEATHS_INDIRECT, na.rm = TRUE))
+
+density_data$STATE <- tolower(density_data$STATE)
+
+us_states <- map_data("state")
+
+map_data <- merge(us_counties, density_data, by.x = "region", by.y = "STATE", all.x = TRUE)
+
+ggplot(map_data) + geom_polygon(data = us_states, 
+                        aes(x=long,y=lat,group=group), 
+                        color = "grey", fill = NA) +
+ geom_density_2d(aes(x = long, y = lat,, color="red"),
+                  data=map_data, linewidth=1)+ 
+  labs(title = "Density Map",
+       subtitle = "Calculated by the sum of INJURIES and DEATHS",
+       caption = "Source: Storm Events Database") +
+  theme_minimal() +
+  coord_map()
+
+```
+I personally prefer the alternative map, which gives a more vivid presentation of the density of the severe event regardless of the states.
+
+2 a) Interactive Map of Severe Weather Events
+```{r}
+library(leaflet)
+```
+
+```{r}
+data$death_num = data$DEATHS_DIRECT + data$DEATHS_INDIRECT
+death_data <- subset(data, death_num!= 0, BEGIN_LAT!= 0)
+
+m <- leaflet(death_data) %>%
+  addTiles() %>%
+  setView(-73.9949344, 40.7179112, zoom = 4) 
+
+content <- paste("Type:",death_data$EVENT_TYPE,"<br/>",
+                 "State:",death_data$STATE,"<br/>",
+                 "Deaths:",death_data$death_num,"<br/>")
+
+mpop1 <- m %>% addCircles(lng = ~BEGIN_LON, lat = ~BEGIN_LAT, color="orange",
+                 popup = content) 
+mpop1
+```
+
+2 b) Color by Type of Weather Event
+```{r}
+
+pal <- colorFactor(palette = "Set3", domain = death_data$EVENT_TYPE)
+
+color_offsel1 = pal(death_data$EVENT_TYPE)
+
+mpop2 <- m %>% addCircles(lng = ~BEGIN_LON, lat = ~BEGIN_LAT, color=color_offsel1,
+                 popup = content) %>%
+  addLegend(pal = pal, values = death_data$EVENT_TYPE, title = "Type") 
+
+mpop2
+```
+
+```{r}
+mpop3 <- m %>% addCircleMarkers(lng = ~BEGIN_LON, lat = ~BEGIN_LAT, color=color_offsel1,
+                 popup = content, clusterOptions = markerClusterOptions()) %>% 
+  addLegend(pal = pal, values = death_data$EVENT_TYPE, title = "Type")
+
+
+mpop3
+```
+
